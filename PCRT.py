@@ -43,17 +43,19 @@ if platform.system() == "Windows":
 		sys.stdout.write(msg)
 		resetColor()	
 
-def str2hex(s):
-	return s.encode('hex').upper()
+def bytes2hex(s):
+	return s.hex().upper()
 
 def int2hex(i):
 	return '0x'+hex(i)[2:].upper()
 
 def str2num(s,n=0):
+	if isinstance(s, int):
+		return s
 	if n==4:
 		return struct.unpack('!I',s)[0]
 	else:
-		return eval('0x'+str2hex(s))
+		return eval('0x'+bytes2hex(s.encode())) # bruh
 
 def WriteFile(filename):
 	if os.path.isfile(filename)==True:
@@ -125,7 +127,7 @@ class PNG(object):
 		if way==1:
 			# way1:add ancillary
 			payload_chunk=self.MakeAncillary(name,payload)
-			pos=data.find('IHDR')
+			pos=data.find(b'IHDR')
 			self.file.write(data[:pos+21])
 			self.file.write(payload_chunk)
 			self.file.write(data[pos+21:])
@@ -133,7 +135,7 @@ class PNG(object):
 			# way2:add critical chunk:IDAT
 			name='IDAT'
 			payload_chunk=self.MakeCritical(name,payload)
-			pos=data.find('IEND')
+			pos=data.find(b'IEND')
 			self.file.write(data[:pos-4])
 			self.file.write(payload_chunk)
 			self.file.write(data[pos-4:])
@@ -396,8 +398,8 @@ class PNG(object):
 
 
 	def FindAncillary(self,data):
-		ancillary=['cHRM','gAMA','sBIT','PLTE','bKGD','sTER','hIST','iCCP','pHYs','sPLT','sRGB','dSIG','eXIf','iTXt','tEXt','zTXt','tIME','tRNS','oFFs','sCAL','fRAc','gIFg','gIFt','gIFx']
-		attach_txt=['eXIf','iTXt','tEXt','zTXt']
+		ancillary=[b'cHRM',b'gAMA',b'sBIT',b'PLTE',b'bKGD',b'sTER',b'hIST',b'iCCP',b'pHYs',b'sPLT',b'sRGB',b'dSIG',b'eXIf',b'iTXt',b'tEXt',b'zTXt',b'tIME',b'tRNS',b'oFFs',b'sCAL',b'fRAc',b'gIFg',b'gIFt',b'gIFx']
+		attach_txt=[b'eXIf',b'iTXt',b'tEXt',b'zTXt']
 		content={}
 		for text in attach_txt:
 			pos=0
@@ -461,7 +463,7 @@ class PNG(object):
 			return None
 
 	def CheckFormat(self,data):
-		png_feature=['PNG','IHDR','IDAT','IEND']
+		png_feature=[b'PNG',b'IHDR',b'IDAT',b'IEND']
 		status = [True for p in png_feature if p in data]
 		if status == []:
 			return -1
@@ -470,9 +472,9 @@ class PNG(object):
 	def CheckHeader(self,data):
 		# Header:89 50 4E 47 0D 0A 1A 0A   %PNG....
 		Header=data[:8]
-		if str2hex(Header)!='89504E470D0A1A0A':
+		if bytes2hex(Header)!='89504E470D0A1A0A':
 			print(Termcolor('Detected','Wrong PNG header!'))
-			print('File header: %s\nCorrect header: 89504E470D0A1A0A'%(str2hex(Header)))
+			print('File header: %s\nCorrect header: 89504E470D0A1A0A'%(bytes2hex(Header)))
 			if self.choices != '':
 				choice=self.choices
 			else:
@@ -480,7 +482,7 @@ class PNG(object):
 				choice=input(msg)
 			if choice == 'y' or choice == '':
 				Header='89504E470D0A1A0A'.decode('hex')
-				print('[Finished] Now header:%s'%(str2hex(Header)))
+				print('[Finished] Now header:%s'%(bytes2hex(Header)))
 			else:
 				return -1
 		else:
@@ -489,10 +491,10 @@ class PNG(object):
 		return 0
 
 	def FindIHDR(self,data):
-		pos=data.find('IHDR')
+		pos=data.find(b'IHDR')
 		if pos == -1:
 			return -1,-1
-		idat_begin=data.find('IDAT')
+		idat_begin=data.find(b'IDAT')
 		if idat_begin != -1:
 			IHDR=data[pos-4:idat_begin-4]
 		else:
@@ -515,7 +517,7 @@ class PNG(object):
 		# check crc
 		calc_crc = self.Checkcrc(chunk_type,chunk_ihdr,crc)
 		if calc_crc != None:
-			print(Termcolor('Detected','Error IHDR CRC found! (offset: %s)\nchunk crc: %s\ncorrect crc: %s'%(int2hex(pos+4+length),str2hex(crc),str2hex(calc_crc))))
+			print(Termcolor('Detected','Error IHDR CRC found! (offset: %s)\nchunk crc: %s\ncorrect crc: %s'%(int2hex(pos+4+length),bytes2hex(crc),bytes2hex(calc_crc))))
 			if self.choices != '':
 				choice=self.choices
 			else:
@@ -539,7 +541,7 @@ class PNG(object):
 							print('[Finished] Successfully fix crc')
 							break
 		else:
-			print('[Finished] Correct IHDR CRC (offset: %s): %s'% (int2hex(pos+4+length),str2hex(crc)))
+			print('[Finished] Correct IHDR CRC (offset: %s): %s'% (int2hex(pos+4+length),bytes2hex(crc)))
 		self.file.write(IHDR)
 		print('[Finished] IHDR chunk check complete (offset: %s)'%(int2hex(pos-4)))
 
@@ -549,7 +551,7 @@ class PNG(object):
 	def CheckIDAT(self,data):
 		# IDAT:length(4 bytes)+chunk_type='IDAT'(4 bytes)+chunk_data(length bytes)+crc(4 bytes)
 		IDAT_table = []
-		idat_begin = data.find('49444154'.decode('hex'))-4
+		idat_begin = data.find(bytes.fromhex("49444154"))-4
 		if idat_begin == -1:
 			print(Termcolor('Detected','Lost all IDAT chunk!'))
 			return -1,''
@@ -563,7 +565,7 @@ class PNG(object):
 				IDAT_table.append(data[i:-12])
 		elif self.i_mode == 1:
 			# slow but safe
-			pos_IEND=data.find('IEND')
+			pos_IEND=data.find(b'IEND')
 			if pos_IEND != -1:
 				pos_list = [g.start() for g in re.finditer('IDAT',data) if g.start() < pos_IEND]
 			else:
@@ -613,7 +615,7 @@ class PNG(object):
 				# check crc
 				calc_crc = self.Checkcrc(chunk_type,chunk_data,crc)
 				if calc_crc != None:
-					print(Termcolor('Detected','Error IDAT CRC found! (offset: %s)\nchunk crc: %s\ncorrect crc: %s'%(int2hex(offset+8+length),str2hex(crc),str2hex(calc_crc))))
+					print(Termcolor('Detected','Error IDAT CRC found! (offset: %s)\nchunk crc: %s\ncorrect crc: %s'%(int2hex(offset+8+length),bytes2hex(crc),bytes2hex(calc_crc))))
 					if self.choices != '':
 						choice=self.choices
 					else:		
@@ -624,7 +626,7 @@ class PNG(object):
 						print('[Finished] Successfully fix crc')
 
 				else:
-					print('[Finished] Correct IDAT CRC (offset: %s): %s'% (int2hex(offset+8+length),str2hex(crc)))
+					print('[Finished] Correct IDAT CRC (offset: %s): %s'% (int2hex(offset+8+length),bytes2hex(crc)))
 
 			# write into file
 			self.file.write(IDAT)
@@ -637,7 +639,7 @@ class PNG(object):
 		pos=-1
 		pos_list=[]
 		while True:
-			pos=chunk_data.find('\x0A',pos+1)
+			pos=chunk_data.find(b'\x0A',pos+1)
 			if pos == -1:
 				break
 			pos_list.append(pos)
@@ -659,17 +661,17 @@ class PNG(object):
 	def CheckIEND(self,data):
 		# IEND:length=0(4 bytes)+chunk_type='IEND'(4 bytes)+crc=AE426082(4 bytes)
 		standard_IEND='\x00\x00\x00\x00IEND\xae\x42\x60\x82'
-		pos=data.find('IEND')
+		pos=data.find(b'IEND')
 		if pos == -1:
 			print(Termcolor('Detected','Lost IEND chunk! Try auto fixing...'))
 			IEND=standard_IEND
-			print('[Finished] Now IEND chunk:%s'%(str2hex(IEND)))
+			print('[Finished] Now IEND chunk:%s'%(bytes2hex(IEND)))
 		else:
 			IEND=data[pos-4:pos+8]
 			if IEND != standard_IEND:
 				print(Termcolor('Detected','Error IEND chunk! Try auto fixing...'))
 				IEND=standard_IEND
-				print('[Finished] Now IEND chunk:%s'%(str2hex(IEND)))
+				print('[Finished] Now IEND chunk:%s'%(bytes2hex(IEND)))
 			else:
 				print('[Finished] Correct IEND chunk')
 			if data[pos+8:] != '':
